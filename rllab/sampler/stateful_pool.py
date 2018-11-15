@@ -1,4 +1,3 @@
-from joblib.pool import MemmapingPool
 import multiprocessing as mp
 from rllab.misc import logger
 import pyprind

@@ -1,0 +1,21 @@
+MuJoCo Pro Lab license activation key, number 6305, type 6.
+
+Issued to McGill University.
+
+Expires February 12, 2019.
+
+Do not share this file with anyone other than the users covered
+by your license agreement with Roboti LLC. This file activates
+MuJoCo Pro on any computer running any supported OS.
+
+Do not modify this file. Its entire content, including the
+plain text section, is used by the activation manager.
+
+62dc118ac8798b8900b8033d71d75e3c7316de6877deb08335c6976ca64daea8
+5820ee7e39a875942b7308decc28847e87c86005a535ce4598ec7bfef6f37781
+b419d4c6ba42ece89bac752ff2bdf84d6129108012ba5fe31ca60ce9d4b15b35
+f3fce43b24a02aa11e8360334728e011f7733051945cdbde84a420b9c82d9d4e
+d04bb486dceb6347fb8b93eb82dd8bcf61260f6b6f6d2cf5fc21a9e8f82b7f11
+88a77ee009a31737468a313e5461327ac9b79f80dbb8b5435706034189db0488
+93cae31f868c22611b95ce448423a3f545023c544d76a655b354deab93ffc729
+6d3a5bdf1cfc474e8e696102eb4f02f83068879784492ba91f6cef4000bcd857

@@ -26,5 +26,5 @@ class PointEnv(Env):
         next_observation = np.copy(self._state)
         return Step(observation=next_observation, reward=reward, done=done)
 
-    def render(self):
+    def render(self, close=True):
         print('current state:', self._state)

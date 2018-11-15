@@ -50,7 +50,6 @@ dependencies:
         - git+https://github.com/neocxi/prettytensor.git
         - jupyter
         - progressbar2
-        - chainer==1.18.0
         - tensorflow-gpu; 'linux' in sys_platform
         - tensorflow; sys_platform == 'darwin'
         - dominate
