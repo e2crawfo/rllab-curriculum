@@ -29,28 +29,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
 
-
-    # setup ec2
-    subnets = [
-        'ap-south-1b', 'us-east-2a', 'us-east-2b', 'us-east-2c', 'ap-northeast-2a', 'ap-northeast-2c',
-        'ap-southeast-1a', 'ap-southeast-1b'
-    ]
-    ec2_instance = args.type if args.type else 'c4.4xlarge'
-    # configure instan
-    info = config.INSTANCE_TYPE_INFO[ec2_instance]
-    config.AWS_INSTANCE_TYPE = ec2_instance
-    config.AWS_SPOT_PRICE = str(info["price"])
-    n_parallel = int(info["vCPU"] / 2)  # make the default 4 if not using ec2
-    if args.ec2:
-        mode = 'ec2'
-    elif args.local_docker:
-        mode = 'local_docker'
-        n_parallel = cpu_count() if not args.debug else 1
-    else:
-        mode = 'local'
-        n_parallel = cpu_count() if not args.debug else 1
-        # n_parallel = multiprocessing.cpu_count()
-
     exp_prefix = 'start-maze11-trpo-onlyFeas-debugged'
 
     vg = VariantGenerator()
@@ -112,74 +90,14 @@ if __name__ == '__main__':
     # vg.add('GAN_discriminator_weight_initializer_stddev', [0.02])
     # vg.add('GAN_discriminator_batch_noise_stddev', [1e-2])
 
-    # Launching
-    print("\n" + "**********" * 10 + "\nexp_prefix: {}\nvariants: {}".format(exp_prefix, vg.size))
-    print('Running on type {}, with price {}, parallel {} on the subnets: '.format(config.AWS_INSTANCE_TYPE,
-                                                                                   config.AWS_SPOT_PRICE, n_parallel),
-          *subnets)
-
     for vv in vg.variants():
-        if mode in ['ec2', 'local_docker']:
-            # choose subnet
-            subnet = random.choice(subnets)
-            config.AWS_REGION_NAME = subnet[:-1]
-            config.AWS_KEY_NAME = config.ALL_REGION_AWS_KEY_NAMES[
-                config.AWS_REGION_NAME]
-            config.AWS_IMAGE_ID = config.ALL_REGION_AWS_IMAGE_IDS[
-                config.AWS_REGION_NAME]
-            config.AWS_SECURITY_GROUP_IDS = \
-                config.ALL_REGION_AWS_SECURITY_GROUP_IDS[
-                    config.AWS_REGION_NAME]
-            config.AWS_NETWORK_INTERFACES = [
-                dict(
-                    SubnetId=config.ALL_SUBNET_INFO[subnet]["SubnetID"],
-                    Groups=config.AWS_SECURITY_GROUP_IDS,
-                    DeviceIndex=0,
-                    AssociatePublicIpAddress=True,
-                )
-            ]
-
-            run_experiment_lite(
-                # use_cloudpickle=False,
-                stub_method_call=run_task,
-                variant=vv,
-                mode=mode,
-                # Number of parallel workers for sampling
-                n_parallel=n_parallel,
-                # Only keep the snapshot parameters for the last iteration
-                snapshot_mode="last",
-                seed=vv['seed'],
-                # plot=True,
-                exp_prefix=exp_prefix,
-                # exp_name=exp_name,
-                # for sync the pkl file also during the training
-                sync_s3_pkl=True,
-                # sync_s3_png=True,
-                sync_s3_html=True,
-                # # use this ONLY with ec2 or local_docker!!!
-                pre_commands=[
-                    'export MPLBACKEND=Agg',
-                    'pip install --upgrade pip',
-                    'pip install --upgrade -I tensorflow',
-                    'pip install git+https://github.com/tflearn/tflearn.git',
-                    'pip install dominate',
-                    'pip install multiprocessing_on_dill',
-                    'pip install scikit-image',
-                    'conda install numpy -n rllab3 -y',
-                ],
-            )
-            if mode == 'local_docker':
-                sys.exit()
-        else:
-            run_experiment_lite(
-                # use_cloudpickle=False,
-                stub_method_call=run_task,
-                variant=vv,
-                mode='local',
-                n_parallel=n_parallel,
-                # Only keep the snapshot parameters for the last iteration
-                snapshot_mode="last",
-                seed=vv['seed'],
-                exp_prefix=exp_prefix,
-                # exp_name=exp_name,
-            )
+        run_experiment_lite(
+            # use_cloudpickle=False,
+            stub_method_call=run_task,
+            variant=vv,
+            mode='local',
+            n_parallel = cpu_count() if not args.debug else 1,
+            snapshot_mode="last",
+            seed=vv['seed'],
+            exp_prefix=exp_prefix,
+        )

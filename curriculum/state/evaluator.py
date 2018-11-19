@@ -175,7 +175,7 @@ def label_states(states, env, policy, horizon, as_goals=True, min_reward=0.1, ma
 
     mean_rewards = mean_rewards.reshape(-1, 1)
     labels = compute_labels(mean_rewards, old_rewards=old_rewards, min_reward=min_reward, max_reward=max_reward,
-                          improvement_threshold=improvement_threshold)
+                            improvement_threshold=improvement_threshold)
     logger.log("Starts labelled")
 
     if full_path:

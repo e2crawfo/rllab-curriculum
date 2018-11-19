@@ -12,6 +12,7 @@ import sys
 import os.path as osp
 import cloudpickle
 import pickle
+from contextlib import ExitStack
 
 import numpy as np
 import scipy.misc
@@ -198,10 +199,21 @@ def generate_starts_alice(env_alice, algo_alice, log_dir, start_states=None, num
 
 def generate_starts(env, policy=None, starts=None, horizon=50, size=10000, subsample=None, variance=1,
                     zero_action=False, animated=False, speedup=1):
-    """ If policy is None, brownian motion applied """
+    """ If policy is None, brownian motion applied.
+
+    Repeatedly samples paths using a random policy or the given policy. Takes all states along the generated paths, puts
+    them in a list. Repeats this until the list has length at least `size`. If `subsample` is not None, randomly chooses
+    `subsample`-many states from the list.
+
+    So this is not really a very aggressive function in terms of sample complexity, especially the subsampling part.
+    We're basically running the environment for `size` steps, but only taking `subsample`-many of those. Probably a better
+    way to do it if one cares about sample complexity.
+
+    """
     if starts is None or len(starts) == 0:
         starts = [env.reset()]
-    print("the starts from where we generate more is of len: ", len(starts))
+    print("In `generate_starts`")
+    print("The number of seed states to which we are applying brownian motion is {}, looking for {} start states".format(len(starts), size))
     if horizon <= 1:
         states = starts  # you better give me some starts if there is no horizon!
     else:
@@ -246,12 +258,11 @@ def generate_starts(env, policy=None, starts=None, horizon=50, size=10000, subsa
                 # timestep = 0.05
                 # time.sleep(timestep / speedup)
             else:
-                # import pdb; pdb.set_trace()
                 brownian_state_wrapper = FunctionWrapper(
                     brownian,
                     env=env,
-                    kill_outside=env.kill_outside,
-                    kill_radius=env.kill_radius,  # this should be set before passing the env to generate_starts
+                    kill_outside=getattr(env, "kill_outside", False),
+                    kill_radius=getattr(env, "kill_radius", 1.0),  # this should be set before passing the env to generate_starts
                     horizon=horizon,
                     variance=variance,
                     policy=policy,
@@ -267,12 +278,12 @@ def generate_starts(env, policy=None, starts=None, horizon=50, size=10000, subsa
                 # generate_starts(env, starts=new_states, horizon=10, variance=0,
                 #                 zero_action=True, animated=True, speedup=10, size=100)
 
-                print('Just collected {} rollouts, with {} states'.format(len(results), new_states.shape))
                 states.extend(new_states.tolist())
-                print('now the states are of len: ', len(states))
                 num_roll_reached_goal += np.sum([result[1] for result in results])
-                print("num_roll_reached_goal ",  np.sum([result[1] for result in results]))
                 num_roll += len(results)
+
+        print("{} rollouts reached the goal out of {}".format(num_roll_reached_goal, num_roll))
+
         logger.log("Generating starts, rollouts that reached goal: " + str(num_roll_reached_goal) + " out of " + str(num_roll))
     logger.log("Starts generated.")
     if subsample is None:
@@ -427,8 +438,13 @@ def find_all_feasible_states_plotting(env, seed_starts, report, distance_thresho
 
 
 def brownian(start, env, kill_outside, kill_radius, horizon, variance, policy=None):
-    # print('starting rollout from : ', start)
-    with env.set_kill_outside(kill_outside=kill_outside, radius=kill_radius):
+    with ExitStack() as stack:
+        try:
+            kill_outside_context = env.set_kill_outside(kill_outside=kill_outside, radius=kill_radius)
+            stack.enter_context(kill_outside_context)
+        except Exception:
+            pass
+
         done = False
         goal_reached = False
         steps = 0
