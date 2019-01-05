@@ -1,4 +1,5 @@
 import matplotlib
+import subprocess
 import cloudpickle
 import pickle
 
@@ -127,10 +128,9 @@ def run_task(v):
 
     # can also filter these starts optionally
 
-
-    all_feasible_starts = pickle.load(
-        open(osp.join(config.PROJECT_PATH, load_dir, 'good_all_feasible_starts.pkl'), 'rb'))
-    logger.log("We have %d feasible starts" % all_feasible_starts.size)
+    # all_feasible_starts = pickle.load(
+    #     open(osp.join(config.PROJECT_PATH, load_dir, 'good_all_feasible_starts.pkl'), 'rb'))
+    # logger.log("We have %d feasible starts" % all_feasible_starts.size)
 
     min_reward = 0.1
     max_reward = 0.9
@@ -155,7 +155,7 @@ def run_task(v):
     init_pos = np.array(init_pos)
 
 
-    for outer_iter in range(1, v['outer_iters']):
+    for outer_iter in range(1, v['outer_iters']+1):
 
         logger.log("Outer itr # %i" % outer_iter)
         logger.log("Sampling starts")
@@ -214,8 +214,6 @@ def run_task(v):
 
             trpo_paths = algo.train()
 
-
-
         logger.log("Labeling the starts")
 
         if v['smart_replay_buffer']:
@@ -234,7 +232,6 @@ def run_task(v):
         labels = np.logical_and(labels[:, 0], labels[:, 1]).astype(int).reshape((-1, 1))
 
         # append new states to list of all starts (replay buffer): Not the low reward ones!!
-
 
         if v['seed_with'] == 'only_goods':
             filtered_raw_starts = [start for start, label in zip(starts, labels) if label[0] == 1]
@@ -268,24 +265,22 @@ def run_task(v):
         else:
             raise Exception
 
-
-
         # need to put this last! otherwise labels variable gets confused
         logger.log("Labeling on uniform starts")
         if not v["debug"]:
-            with logger.tabular_prefix("Uniform_"):
-                unif_starts = all_feasible_starts.sample(100)
-                mean_reward, paths = evaluate_states(unif_starts, env, policy, v['horizon'], n_traj=v['n_traj'], key='goal_reached',
-                                                     as_goals=False, full_path=True)
-                env.log_diagnostics(paths)
-                mean_rewards = mean_reward.reshape(-1, 1)
-                labels = compute_labels(mean_rewards, old_rewards=old_rewards, min_reward=min_reward, max_reward=max_reward,
-                                        improvement_threshold=improvement_threshold)
-                logger.log("Starts labelled")
-                plot_labeled_states(unif_starts, labels, report=report, itr=outer_iter, limit=v['goal_range'],
-                                    center=v['goal_center'], maze_id=v['maze_id'],
-                                    summary_string_base='initial starts labels:\n')
-                # report.add_text("Success: " + str(np.mean(mean_reward)))
+            # with logger.tabular_prefix("Uniform_"):
+            #     unif_starts = all_feasible_starts.sample(100)
+            #     mean_reward, paths = evaluate_states(unif_starts, env, policy, v['horizon'], n_traj=v['n_traj'], key='goal_reached',
+            #                                          as_goals=False, full_path=True)
+            #     env.log_diagnostics(paths)
+            #     mean_rewards = mean_reward.reshape(-1, 1)
+            #     labels = compute_labels(mean_rewards, old_rewards=old_rewards, min_reward=min_reward, max_reward=max_reward,
+            #                             improvement_threshold=improvement_threshold)
+            #     logger.log("Starts labelled")
+            #     plot_labeled_states(unif_starts, labels, report=report, itr=outer_iter, limit=v['goal_range'],
+            #                         center=v['goal_center'], maze_id=v['maze_id'],
+            #                         summary_string_base='initial starts labels:\n')
+            #     report.add_text("Uniform Success: " + str(np.mean(mean_reward)))
 
             with logger.tabular_prefix("Fixed_"):
                 mean_reward, paths = evaluate_states(init_pos, env, policy, v['horizon'], n_traj=5, key='goal_reached',
@@ -304,3 +299,8 @@ def run_task(v):
             report.save()
             logger.record_tabular("Fixed test set_success: ", np.mean(mean_reward))
             logger.dump_tabular()
+
+        if outer_iter % 1 == 0 and v['scratch_dir']:
+            command = 'rsync -a --delete {} {}'.format(os.path.join(log_dir, ''), os.path.join(v['scratch_dir'], ''))
+            print("Running command:\n{}".format(command))
+            subprocess.run(command.split(), check=True)

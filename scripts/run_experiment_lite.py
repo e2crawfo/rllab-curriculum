@@ -19,6 +19,10 @@ import logging
 
 
 def run_experiment(argv):
+    # e2crawfo: These imports, in this order, were necessary for fixing issues on cedar.
+    import rllab.mujoco_py.mjlib
+    import tensorflow
+
     default_log_dir = config.LOG_DIR
     now = datetime.datetime.now(dateutil.tz.tzlocal())
 

@@ -13,7 +13,8 @@ elif sys.platform.startswith("win"):
 else:
     raise RuntimeError("unrecognized platform %s"%sys.platform)
 
-
+# libfile = "/home/e2crawfo/rllab-curriculum-private/vendor/mujoco/libmujoco131.so"
+print("Loading mujoco lib at {}".format(libfile))
 mjlib = cdll.LoadLibrary(libfile)
 
 
