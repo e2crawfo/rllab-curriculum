@@ -101,6 +101,7 @@ def run_task(v):
                                           )
     else:
         all_starts = StateCollection(distance_threshold=v['coll_eps'])
+
     brownian_starts = StateCollection(distance_threshold=v['regularize_starts'])
     with env.set_kill_outside():
         seed_starts = generate_starts(env, starts=[v['start_goal']], horizon=10,  # this is smaller as they are seeds!

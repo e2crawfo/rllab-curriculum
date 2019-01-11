@@ -43,7 +43,6 @@ rllab/config_personal.py
 *.sublime-project
 *.sublime-workspace
 *.bin
-*.sh
 MNIST/
 logs/
 *.html
@@ -62,5 +61,6 @@ gpr_root
 _pyxbld
 sandbox/rocky/motor
 *.egg-info
+slurm-*.out
 
 temp/

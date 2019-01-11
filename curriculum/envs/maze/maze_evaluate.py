@@ -366,6 +366,50 @@ def test_and_plot_policy(policy, env, as_goals=True, visualize=True, sampling_re
     return mean_rewards, success
 
 
+def test_and_plot_policy2(policy, env, as_goals=True, visualize=True, sampling_res=1,
+                         n_traj=1, max_reward=1, itr=0, report=None, center=None, limit=None, bounds=None):
+    """ modified version of test_and_plot_policy which returns the per-state rewards and successes. """
+
+    avg_totRewards, avg_success, states, spacing, avg_time = test_policy(
+        policy, env, as_goals, visualize, center=center, sampling_res=sampling_res, n_traj=n_traj, bounds=bounds)
+    obj = env
+    while not hasattr(obj, '_maze_id') and hasattr(obj, 'wrapped_env'):
+        obj = obj.wrapped_env
+    maze_id = obj._maze_id if hasattr(obj, '_maze_id') else None
+    plot_heatmap(avg_success, states, spacing=spacing, show_heatmap=False, maze_id=maze_id,
+                 center=center, limit=limit)
+    reward_img = save_image()
+
+    plot_heatmap(avg_time, states, spacing=spacing, show_heatmap=False, maze_id=maze_id,
+                 center=center, limit=limit, adaptive_range=True)
+    time_img = save_image()
+
+    mean_rewards = np.mean(avg_totRewards)
+    success = np.mean(avg_success)
+
+    with logger.tabular_prefix('Outer_'):
+        logger.record_tabular('iter', itr)
+        logger.record_tabular('MeanRewards', mean_rewards)
+        logger.record_tabular('Success', success)
+    # logger.dump_tabular(with_prefix=False)
+
+    if report is not None:
+        report.add_image(
+            reward_img,
+            'policy performance\n itr: {} \nmean_rewards: {} \nsuccess: {}'.format(
+                itr, mean_rewards, success
+            )
+        )
+        report.add_image(
+            time_img,
+            'policy time\n itr: {} \n'.format(
+                itr
+            )
+        )
+    return mean_rewards, success, states, avg_totRewards, avg_success
+
+
+
 def plot_policy_means(policy, env, sampling_res=2, report=None, center=None, limit=None):  # only for start envs!
     states, spacing = find_empty_spaces(env, sampling_res=sampling_res)
     goal = env.current_goal

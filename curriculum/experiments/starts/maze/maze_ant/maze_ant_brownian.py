@@ -16,16 +16,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--name', '-n', type=str, default='', help='set exp prefix name and new file name')
     parser.add_argument('--debug', action='store_true', default=False, help="run code without multiprocessing")
-    parser.add_argument('--n-outer-iters', default=2000, type=int)
-    parser.add_argument('--pg-batch-size', default=120000, type=int)
+    parser.add_argument('--n-outer-iters', default=1000, type=int)
+    parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--log-dir', default=None)
     parser.add_argument('--scratch-dir', default=None)
     args = parser.parse_args()
-
-    mode = 'local'
-    # n_parallel = cpu_count() if not args.debug else 1
-    # n_parallel = multiprocessing.cpu_count()
-    n_parallel = 1
 
     vg = VariantGenerator()
     vg.add('maze_id', [0])  # default is 0
@@ -43,8 +38,7 @@ if __name__ == '__main__':
     vg.add('goal_range',
            lambda maze_id: [4] if maze_id == 0 else [7])
     vg.add('goal_center', lambda maze_id: [(2, 2)] if maze_id == 0 else [(0, 0)])
-    # vg.add('terminal_eps', [0.5]) # changed!!
-    vg.add('terminal_eps', [1.0])
+    vg.add('terminal_eps', [0.5]) # changed!!
     # brownian params
     vg.add('brownian_variance', [1])
     vg.add('initial_brownian_horizon', [200])
@@ -60,50 +54,35 @@ if __name__ == '__main__':
     vg.add('regularize_starts', [0])
 
     vg.add('persistence', [1])
-    vg.add('n_traj', [3])  # only for labeling and plotting (for now, later it will have to be equal to persistence!)
+    vg.add('n_traj', [3])
     vg.add('filter_bad_starts', [False])
     vg.add('sampling_res', [2])
     vg.add('with_replacement', [True])
-    # replay buffer
     vg.add('replay_buffer', [True])
 
-    # Smart replay buffer parameters
-    vg.add('smart_replay_buffer', [True])
-    vg.add('smart_replay_abs', [True])
-    vg.add('smart_replay_eps', [0.5])  # Using the default values from SmartStateCollection
-    # vg.add('smart_replay_abs', [True, False])
-    # vg.add('smart_replay_eps', [0.2, 0.5, 1])
-
-    vg.add('coll_eps', [0.05]) # should try this
+    vg.add('coll_eps', [0.05])
     vg.add('num_new_starts', [200])
     vg.add('num_old_starts', [100])
     vg.add('feasibility_path_length', [100])
-    # sampling params
-    if args.debug:
-        vg.add('horizon', lambda maze_id: [300] if maze_id == 0 else [500])
-        vg.add('pg_batch_size', [15000])
-        vg.add('inner_iters', [1])  # again we will have to divide/adjust the
-        vg.add('debug', [True])
-    else:
-        vg.add('horizon', lambda maze_id: [2000] if maze_id == 0 else [500])
-        vg.add('pg_batch_size', [args.pg_batch_size])
-        vg.add('inner_iters', [5])  # again we will have to divide/adjust the
-        vg.add('debug', [False])
-    vg.add('outer_iters', lambda maze_id: [args.n_outer_iters] if maze_id == 0 else [1000])
+
+    vg.add('horizon', lambda maze_id: [2000])
+    vg.add('pg_batch_size', [50000])
+    vg.add('inner_iters', [5])
+    vg.add('debug', [False])
+    vg.add('outer_iters', lambda maze_id: [args.n_outer_iters])
 
     # policy initialization
     vg.add('output_gain', [0.1])
     vg.add('policy_init_std', [1])
     vg.add('learn_std', [False]) #2
     vg.add('adaptive_std', [False])
-    vg.add('discount', [0.995]) #1
+    vg.add('discount', [0.998])
     vg.add('seed_with', ['only_goods'])
-    vg.add('seed', [33])
+    vg.add('seed', [args.seed])
 
     if args.scratch_dir:
         vg.add('scratch_dir', [args.scratch_dir])
 
-    mode = "local"
     exp_prefix = 'ant-startgen-smartreplay4'
     print("\n" + "**********" * 10 + "\nexp_prefix: {}\nvariants: {}".format(exp_prefix, vg.size))
 

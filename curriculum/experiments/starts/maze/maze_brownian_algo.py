@@ -5,6 +5,9 @@ import os
 import os.path as osp
 import random
 import numpy as np
+import subprocess
+import json
+import csv
 
 from rllab.misc import logger
 from curriculum.logging import HTMLReport
@@ -19,6 +22,7 @@ from rllab.algos.trpo import TRPO
 from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
 from rllab.envs.normalized_env import normalize
 from rllab.policies.gaussian_mlp_policy import GaussianMLPPolicy
+from rllab.baselines.gaussian_mlp_baseline import GaussianMLPBaseline
 
 from curriculum.state.evaluator import convert_label, label_states, evaluate_states, label_states_from_paths
 from curriculum.envs.base import UniformListStateGenerator, UniformStateGenerator, FixedStateGenerator
@@ -26,7 +30,7 @@ from curriculum.state.utils import StateCollection
 
 from curriculum.envs.start_env import generate_starts
 from curriculum.envs.goal_start_env import GoalStartExplorationEnv
-from curriculum.envs.maze.maze_evaluate import test_and_plot_policy, sample_unif_feas, unwrap_maze, plot_policy_means
+from curriculum.envs.maze.maze_evaluate import test_and_plot_policy2, sample_unif_feas, unwrap_maze, plot_policy_means
 from curriculum.envs.maze.point_maze_env import PointMazeEnv
 
 EXPERIMENT_TYPE = osp.basename(__file__).split('.')[0]
@@ -37,10 +41,9 @@ def run_task(v):
     np.random.seed(v['seed'])
     sampling_res = 2 if 'sampling_res' not in v.keys() else v['sampling_res']
 
-    # Log performance of randomly initialized policy with FIXED goal [0.1, 0.1]
     logger.log("Initializing report and plot_policy_reward...")
-    log_dir = logger.get_snapshot_dir()  # problem with logger module here!!
-    report = HTMLReport(osp.join(log_dir, 'report.html'), images_per_row=10)
+    log_dir = logger.get_snapshot_dir()
+    report = HTMLReport(osp.join(log_dir, 'report.html'), images_per_row=1000)
 
     report.add_header("{}".format(EXPERIMENT_TYPE))
     report.add_text(format_dict(v))
@@ -75,12 +78,9 @@ def run_task(v):
         init_std=v['policy_init_std'],
     )
 
-    if v['constant_baseline']:
-        from curriculum.state.constant_baseline import ConstantBaseline
-        logger.log("Using constant baseline")
-        baseline = ConstantBaseline(env_spec=env.spec, value=1.0)
+    if v["baseline"] == "MLP":
+        baseline = GaussianMLPBaseline(env_spec=env.spec)
     else:
-        logger.log("Using linear baseline")
         baseline = LinearFeatureBaseline(env_spec=env.spec)
 
     # initialize all logging arrays on itr0
@@ -100,13 +100,6 @@ def run_task(v):
 
     for outer_iter in range(1, v['outer_iters']):
         report.new_row()
-
-        logger.log('Generating Heatmap...')
-        plot_policy_means(
-            policy, env, sampling_res=sampling_res, report=report, limit=v['goal_range'], center=v['goal_center'])
-        test_and_plot_policy(
-            policy, env, as_goals=False, max_reward=v['max_reward'], sampling_res=sampling_res, n_traj=v['n_traj'],
-            itr=outer_iter, report=report, center=v['goal_center'], limit=v['goal_range'])
 
         logger.log("Outer itr # %i" % outer_iter)
         logger.log("Sampling starts")
@@ -191,13 +184,10 @@ def run_task(v):
 
         path_labels = np.logical_and(path_labels[:, 0], path_labels[:, 1]).astype(int).reshape((-1, 1))
 
-        logger.dump_tabular(with_prefix=False)
-
         # append new states to list of all starts (replay buffer): Not the low reward ones!!
         filtered_raw_starts = [start for start, label in zip(starts, path_labels) if label[0] == 1]
 
-        all_starts.append(starts)
-        # all_starts.append(filtered_raw_starts)
+        all_starts.append(filtered_raw_starts)
 
         if v['seed_with'] == 'only_goods':
             if len(filtered_raw_starts) > 0:
@@ -221,4 +211,33 @@ def run_task(v):
         elif v['seed_with'] == 'on_policy':
             seed_starts = generate_starts(env, policy, starts=starts, horizon=v['horizon'], subsample=v['num_new_starts'])
 
+        logger.log('Generating Heatmap...')
+        plot_policy_means(
+            policy, env, sampling_res=sampling_res, report=report, limit=v['goal_range'], center=v['goal_center'])
+        _, _, states, returns, successes = test_and_plot_policy2(
+            policy, env, as_goals=False, max_reward=v['max_reward'], sampling_res=sampling_res, n_traj=v['n_traj'],
+            itr=outer_iter, report=report, center=v['goal_center'], limit=v['goal_range'])
+
+        eval_state_path = osp.join(log_dir, "eval_states.json")
+        if not osp.exists(eval_state_path):
+            with open(eval_state_path, 'w') as f:
+                json.dump(np.array(states).tolist(), f)
+
+        with open(osp.join(log_dir, 'eval_pos_per_state_mean_return.csv'), 'a') as f:
+            writer = csv.writer(f)
+            row = [outer_iter] + list(returns)
+            writer.writerow(row)
+
+        with open(osp.join(log_dir, 'eval_pos_per_state_mean_success.csv'), 'a') as f:
+            writer = csv.writer(f)
+            row = [outer_iter] + list(successes)
+            writer.writerow(row)
+
+        logger.dump_tabular()
+
         report.save()
+
+        if outer_iter % 5 == 0 and v.get('scratch_dir', None):
+            command = 'rsync -a {} {}'.format(os.path.join(log_dir, ''), os.path.join(v['scratch_dir'], ''))
+            print("Running command:\n{}".format(command))
+            subprocess.run(command.split(), check=True)

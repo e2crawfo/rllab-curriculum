@@ -11,6 +11,8 @@ import os.path as osp
 import random
 import time
 import numpy as np
+import csv
+import json
 
 from rllab.misc import logger
 from collections import OrderedDict
@@ -38,8 +40,7 @@ from curriculum.envs.start_env import generate_starts, find_all_feasible_states,
 from curriculum.envs.goal_start_env import GoalStartExplorationEnv
 from curriculum.envs.arm3d.arm3d_disc_env import Arm3dDiscEnv
 from curriculum.envs.maze.maze_ant.ant_maze_start_env import AntMazeEnv
-from curriculum.envs.maze.maze_evaluate import test_and_plot_policy, sample_unif_feas, unwrap_maze, \
-    plot_policy_means
+from curriculum.envs.maze.maze_evaluate import sample_unif_feas, unwrap_maze, plot_policy_means
 import pickle
 
 
@@ -50,12 +51,9 @@ def run_task(v):
     random.seed(v['seed'])
     np.random.seed(v['seed'])
 
-    # Log performance of randomly initialized policy with FIXED goal [0.1, 0.1]
     logger.log("Initializing report...")
-    log_dir = logger.get_snapshot_dir()  # problem with logger module here!!
-    if log_dir is None:
-        log_dir = "/home/michael/"
-    report = HTMLReport(osp.join(log_dir, 'report.html'), images_per_row=3)
+    log_dir = logger.get_snapshot_dir()
+    report = HTMLReport(osp.join(log_dir, 'report.html'), images_per_row=1000)
 
     report.add_header("{}".format(EXPERIMENT_TYPE))
     report.add_text(format_dict(v))
@@ -96,7 +94,6 @@ def run_task(v):
         init_std=v['policy_init_std'],
     )
 
-    #baseline = LinearFeatureBaseline(env_spec=env.spec)
     if v["baseline"] == "MLP":
         baseline = GaussianMLPBaseline(env_spec=env.spec)
     else:
@@ -104,22 +101,13 @@ def run_task(v):
 
     # load the state collection from data_upload
 
-    if v['smart_replay_buffer']:
-        all_starts = SmartStateCollection(distance_threshold=v['coll_eps'], states_transform=lambda x: x[:, :2],
-                                          abs=v["smart_replay_abs"],
-                                          eps=v["smart_replay_eps"]
-                                          )
-    else:
-        all_starts = StateCollection(distance_threshold=v['coll_eps'], states_transform=lambda x: x[:, :2])
-    # brownian_starts = StateCollection(distance_threshold=v['regularize_starts'])
-    # with env.set_kill_outside():
+    all_starts = StateCollection(distance_threshold=v['coll_eps'], states_transform=lambda x: x[:, :2])
+
     # initial brownian horizon and size are pretty important
     logger.log("Brownian horizon: {}".format(v['initial_brownian_horizon']))
-    seed_starts = generate_starts(env, starts=[v['start_goal']], horizon=v['initial_brownian_horizon'], size=15000, # this is smaller as they are seeds!
+    seed_starts = generate_starts(env, starts=[v['start_goal']], horizon=v['initial_brownian_horizon'], size=15000,
                                   variance=v['brownian_variance'],
-                                  animated=False,
-                                  # subsample=v['num_new_starts'],
-                                  )  # , animated=True, speedup=1)
+                                  animated=False,)
 
     if v['filter_bad_starts']:
         logger.log("Prefilter seed starts: {}".format(len(seed_starts)))
@@ -154,6 +142,8 @@ def run_task(v):
         pos.extend([0.55, 1, 0, 0, 0, 0, 1, 0, -1, 0, -1, 0, 1, ])
     init_pos = np.array(init_pos)
 
+    with open(osp.join(log_dir, 'init_pos.json'), 'w') as f:
+        json.dump(init_pos.tolist(), f)
 
     for outer_iter in range(1, v['outer_iters']+1):
 
@@ -216,13 +206,9 @@ def run_task(v):
 
         logger.log("Labeling the starts")
 
-        if v['smart_replay_buffer']:
-            [starts, labels, mean_rewards] = label_states_from_paths(trpo_paths, n_traj=v['n_traj'], key='goal_reached',
-                                                   as_goal=False, env=env, return_mean_rewards=True)
-        else:
-            [starts, labels] = label_states_from_paths(trpo_paths, n_traj=v['n_traj'], key='goal_reached',
-                                                       # using the min n_traj
-                                                       as_goal=False, env=env)
+        [starts, labels] = label_states_from_paths(trpo_paths, n_traj=v['n_traj'], key='goal_reached',
+                                                   # using the min n_traj
+                                                   as_goal=False, env=env)
 
         start_classes, text_labels = convert_label(labels)
         plot_labeled_states(starts, labels, report=report, itr=outer_iter, limit=v['goal_range'],
@@ -231,10 +217,10 @@ def run_task(v):
 
         labels = np.logical_and(labels[:, 0], labels[:, 1]).astype(int).reshape((-1, 1))
 
-        # append new states to list of all starts (replay buffer): Not the low reward ones!!
+        filtered_raw_starts = [start for start, label in zip(starts, labels) if label[0] == 1]
+        all_starts.append(filtered_raw_starts)
 
         if v['seed_with'] == 'only_goods':
-            filtered_raw_starts = [start for start, label in zip(starts, labels) if label[0] == 1]
             if len(filtered_raw_starts) > 0:  # add a ton of noise if all the states I had ended up being high_reward!
                 logger.log("We have {} good starts!".format(len(filtered_raw_starts)))
                 seed_starts = filtered_raw_starts
@@ -249,19 +235,6 @@ def run_task(v):
         elif v['seed_with'] == 'all_previous':
             seed_starts = starts
             filtered_raw_starts = starts # no filtering done
-        else:
-            raise Exception
-
-        # update replay buffer!
-        if v['smart_replay_buffer']:
-            # within the replay buffer, we can choose to disregard states that have a reward between 0 and 1
-            if v['seed_with'] == 'only_goods':
-                logger.log("Only goods and smart replay buffer (probably best option)")
-                all_starts.update_starts(starts, mean_rewards, True, logger)
-            else:
-                all_starts.update_starts(starts, mean_rewards, False, logger)
-        elif v['seed_with'] == 'only_goods' or v['seed_with'] == 'all_previous':
-            all_starts.append(filtered_raw_starts)
         else:
             raise Exception
 
@@ -285,6 +258,12 @@ def run_task(v):
             with logger.tabular_prefix("Fixed_"):
                 mean_reward, paths = evaluate_states(init_pos, env, policy, v['horizon'], n_traj=5, key='goal_reached',
                                                      as_goals=False, full_path=True)
+
+                with open(osp.join(log_dir, 'init_pos_per_state_mean_return.csv'), 'a') as f:
+                    writer = csv.writer(f)
+                    row = [outer_iter] + list(mean_reward)
+                    writer.writerow(row)
+
                 env.log_diagnostics(paths)
                 mean_rewards = mean_reward.reshape(-1, 1)
                 labels = compute_labels(mean_rewards, old_rewards=old_rewards, min_reward=min_reward, max_reward=max_reward,
@@ -300,7 +279,7 @@ def run_task(v):
             logger.record_tabular("Fixed test set_success: ", np.mean(mean_reward))
             logger.dump_tabular()
 
-        if outer_iter % 1 == 0 and v['scratch_dir']:
+        if outer_iter % 1 == 0 and v.get('scratch_dir', None):
             command = 'rsync -a --delete {} {}'.format(os.path.join(log_dir, ''), os.path.join(v['scratch_dir'], ''))
             print("Running command:\n{}".format(command))
             subprocess.run(command.split(), check=True)
