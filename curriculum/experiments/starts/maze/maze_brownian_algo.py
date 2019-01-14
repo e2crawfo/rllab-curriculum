@@ -152,40 +152,29 @@ def run_task(v):
 
             trpo_paths = algo.train()
 
-        # labels = label_states(starts, env, policy, v['horizon'], as_goals=False, n_traj=v['n_traj'], key='goal_reached')
-        # plot_labeled_states(starts, labels, report=report, itr=outer_iter, limit=v['goal_range'],
-        #                     center=v['goal_center'], maze_id=v['maze_id'],
-        #                     summary_string_base="all starts after update\n")
-
         if v['use_trpo_paths']:
             logger.log("labeling starts with trpo rollouts")
-            [starts, path_labels] = label_states_from_paths(
+            [starts, labels] = label_states_from_paths(
                 trpo_paths, n_traj=2, key='goal_reached', as_goal=False, env=env)
             paths = [path for paths in trpo_paths for path in paths]
         else:
             logger.log("labeling starts manually")
-            path_labels, paths = label_states(
+            labels, paths = label_states(
                 starts, env, policy, v['horizon'], as_goals=False, n_traj=v['n_traj'], key='goal_reached', full_path=True)
 
-        plot_labeled_states(starts, path_labels, report=report, itr=outer_iter, limit=v['goal_range'],
+        start_classes, text_labels = convert_label(labels)
+
+        plot_labeled_states(starts, labels, report=report, itr=outer_iter, limit=v['goal_range'],
                             center=v['goal_center'], maze_id=v['maze_id'],
                             summary_string_base="all starts after update\n")
 
         with logger.tabular_prefix("OnStarts_"):
             env.log_diagnostics(paths)
 
-        start_classes, text_labels = convert_label(path_labels)
-
-        # ###### extra for deterministic:
-        # logger.log("Labeling the goals deterministic")
-        # with policy.set_std_to_0():
-        #     labels_det = label_states(goals, env, policy, v['horizon'], n_traj=v['n_traj'], n_processes=1)
-        # plot_labeled_states(goals, labels_det, report=report, itr=outer_iter, limit=v['goal_range'], center=v['goal_center'])
-
-        path_labels = np.logical_and(path_labels[:, 0], path_labels[:, 1]).astype(int).reshape((-1, 1))
+        labels = np.logical_and(labels[:, 0], labels[:, 1]).astype(int).reshape((-1, 1))
 
         # append new states to list of all starts (replay buffer): Not the low reward ones!!
-        filtered_raw_starts = [start for start, label in zip(starts, path_labels) if label[0] == 1]
+        filtered_raw_starts = [start for start, label in zip(starts, labels) if label[0] == 1]
 
         all_starts.append(filtered_raw_starts)
 
@@ -214,6 +203,7 @@ def run_task(v):
         logger.log('Generating Heatmap...')
         plot_policy_means(
             policy, env, sampling_res=sampling_res, report=report, limit=v['goal_range'], center=v['goal_center'])
+
         _, _, states, returns, successes = test_and_plot_policy2(
             policy, env, as_goals=False, max_reward=v['max_reward'], sampling_res=sampling_res, n_traj=v['n_traj'],
             itr=outer_iter, report=report, center=v['goal_center'], limit=v['goal_range'])
@@ -237,7 +227,12 @@ def run_task(v):
 
         report.save()
 
-        if outer_iter % 5 == 0 and v.get('scratch_dir', None):
+        if outer_iter == 1 or outer_iter % 5 == 0 and v.get('scratch_dir', False):
             command = 'rsync -a {} {}'.format(os.path.join(log_dir, ''), os.path.join(v['scratch_dir'], ''))
             print("Running command:\n{}".format(command))
             subprocess.run(command.split(), check=True)
+
+    if v.get('scratch_dir', False):
+        command = 'rsync -a {} {}'.format(os.path.join(log_dir, ''), os.path.join(v['scratch_dir'], ''))
+        print("Running command:\n{}".format(command))
+        subprocess.run(command.split(), check=True)

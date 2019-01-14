@@ -207,7 +207,6 @@ def run_task(v):
         logger.log("Labeling the starts")
 
         [starts, labels] = label_states_from_paths(trpo_paths, n_traj=v['n_traj'], key='goal_reached',
-                                                   # using the min n_traj
                                                    as_goal=False, env=env)
 
         start_classes, text_labels = convert_label(labels)
@@ -279,7 +278,12 @@ def run_task(v):
             logger.record_tabular("Fixed test set_success: ", np.mean(mean_reward))
             logger.dump_tabular()
 
-        if outer_iter % 1 == 0 and v.get('scratch_dir', None):
+        if outer_iter == 1 or outer_iter % 5 == 0 and v.get('scratch_dir', False):
             command = 'rsync -a --delete {} {}'.format(os.path.join(log_dir, ''), os.path.join(v['scratch_dir'], ''))
             print("Running command:\n{}".format(command))
             subprocess.run(command.split(), check=True)
+
+    if v.get('scratch_dir', False):
+        command = 'rsync -a {} {}'.format(os.path.join(log_dir, ''), os.path.join(v['scratch_dir'], ''))
+        print("Running command:\n{}".format(command))
+        subprocess.run(command.split(), check=True)

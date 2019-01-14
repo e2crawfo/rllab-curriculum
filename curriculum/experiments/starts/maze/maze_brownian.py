@@ -1,8 +1,6 @@
 import os
 os.environ['THEANO_FLAGS'] = 'floatX=float32,device=cpu'
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
-import tensorflow as tf
-import tflearn
 import argparse
 from multiprocessing import cpu_count
 from rllab.misc.instrument import run_experiment_lite
@@ -19,10 +17,13 @@ if __name__ == '__main__':
     parser.add_argument('--n-outer-iters', default=400, type=int)
     parser.add_argument('--log-dir', default=None)
     parser.add_argument('--scratch-dir', default=None)
+    parser.add_argument('--goal', type=str, default="5,4")
     parser.add_argument('--seed', default=0, type=int)
     args = parser.parse_args()
 
-    exp_prefix = 'start-brownian-maze11-run1'
+    exp_prefix = 'start-brownian-maze11-run1_goal={}'.format(args.goal)
+
+    goal = tuple(int(i) for i in args.goal.split(","))
 
     vg = VariantGenerator()
     vg.add('maze_id', [11])  # default is 0
@@ -34,8 +35,8 @@ if __name__ == '__main__':
                                                 else [(2, 2, 0, 0)] if maze_id == 0 and start_size == 4
                                                 else [(0, 0)] if start_size == 2
                                                 else [(0, 0, 0, 0)])
-    vg.add('ultimate_goal', lambda maze_id: [(0, 4)] if maze_id == 0 else [(2, 4), (0, 0)] if maze_id == 12 else [(5, 4)])
-    vg.add('goal_size', [2])  # this is the ultimate goal we care about: getting the pendulum upright
+    vg.add('ultimate_goal', [goal])
+    vg.add('goal_size', [2])
     vg.add('terminal_eps', [0.3])
     vg.add('only_feasible', [True])
     vg.add('goal_range',
@@ -53,8 +54,8 @@ if __name__ == '__main__':
     vg.add('extend_dist_rew', [False])
     vg.add('persistence', [1])
     vg.add('n_traj', [3])
-    vg.add('sampling_res', [2])
     vg.add('with_replacement', [True])
+    vg.add('sampling_res', [2])
     vg.add('use_trpo_paths', [True])
     vg.add('replay_buffer', [True])
     vg.add('coll_eps', [0.3])
